@@ -2,7 +2,7 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>PCP Negotiation Analyzer</title>
+<title>PCP Negotiation Tool</title>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
@@ -25,6 +25,7 @@ box-shadow:0 10px 25px rgba(0,0,0,0.1);
 
 h1{
 text-align:center;
+margin-bottom:25px;
 }
 
 .grid{
@@ -33,30 +34,38 @@ grid-template-columns:1fr 1fr;
 gap:20px;
 }
 
+label{
+font-weight:bold;
+}
+
 input,select{
 width:100%;
 padding:10px;
 margin-top:5px;
+margin-bottom:12px;
 border-radius:6px;
 border:1px solid #ccc;
 }
 
 button{
-margin-top:20px;
-padding:15px;
 width:100%;
-border:none;
+padding:14px;
 background:#0077ff;
 color:white;
-font-size:16px;
+border:none;
 border-radius:8px;
+font-size:16px;
 cursor:pointer;
+}
+
+button:hover{
+background:#005cd4;
 }
 
 .result{
 margin-top:30px;
-background:#eef3ff;
 padding:20px;
+background:#eef4ff;
 border-radius:8px;
 }
 
@@ -75,6 +84,7 @@ margin-top:30px;
 }
 
 </style>
+
 </head>
 
 <body>
@@ -86,17 +96,19 @@ margin-top:30px;
 <div class="grid">
 
 <div>
+
+<label>Year</label>
+<select id="year"></select>
+
 <label>Make</label>
-<input id="make">
+<select id="make">
+<option>Select make</option>
+</select>
 
 <label>Model</label>
-<input id="model">
-
-<label>Car Price (£)</label>
-<input id="price" type="number">
-
-<label>Car Year</label>
-<select id="year"></select>
+<select id="model">
+<option>Select model</option>
+</select>
 
 <label>Fuel Type</label>
 <select id="fuel">
@@ -116,6 +128,9 @@ margin-top:30px;
 
 <div>
 
+<label>Purchase Price (£)</label>
+<input id="price" type="number">
+
 <label>Deposit (£)</label>
 <input id="deposit" type="number">
 
@@ -124,21 +139,14 @@ margin-top:30px;
 
 <label>Term (months)</label>
 <select id="term">
-<option value="24">24</option>
-<option value="36">36</option>
-<option value="48">48</option>
-<option value="60">60</option>
+<option>24</option>
+<option>36</option>
+<option>48</option>
+<option>60</option>
 </select>
 
-<label>Dealer Balloon Payment (£)</label>
+<label>Dealer Balloon (£)</label>
 <input id="balloon" type="number">
-
-<label>Estimated Service History</label>
-<select id="service">
-<option>Full</option>
-<option>Partial</option>
-<option>Unknown</option>
-</select>
 
 </div>
 
@@ -154,12 +162,63 @@ margin-top:30px;
 
 <script>
 
-for(let y=2026;y>=2005;y--){
+const yearSelect = document.getElementById("year");
+const makeSelect = document.getElementById("make");
+const modelSelect = document.getElementById("model");
+
+for(let y=2026;y>=2000;y--){
 let opt=document.createElement("option");
 opt.value=y;
 opt.text=y;
-document.getElementById("year").appendChild(opt);
+yearSelect.appendChild(opt);
 }
+
+async function loadMakes(){
+
+let res = await fetch("https://www.carqueryapi.com/api/0.3/?cmd=getMakes");
+
+let text = await res.text();
+let json = JSON.parse(text.replace("?(", "").replace(");", ""));
+
+makeSelect.innerHTML="<option>Select make</option>";
+
+json.Makes.forEach(m=>{
+let opt=document.createElement("option");
+opt.value=m.make_display;
+opt.text=m.make_display;
+makeSelect.appendChild(opt);
+});
+
+}
+
+async function loadModels(){
+
+let make=makeSelect.value;
+let year=yearSelect.value;
+
+if(!make) return;
+
+let url=`https://www.carqueryapi.com/api/0.3/?cmd=getModels&make=${make}&year=${year}`;
+
+let res=await fetch(url);
+
+let text=await res.text();
+
+let json=JSON.parse(text.replace("?(", "").replace(");", ""));
+
+modelSelect.innerHTML="<option>Select model</option>";
+
+json.Models.forEach(m=>{
+let opt=document.createElement("option");
+opt.value=m.model_name;
+opt.text=m.model_name;
+modelSelect.appendChild(opt);
+});
+
+}
+
+makeSelect.addEventListener("change",loadModels);
+yearSelect.addEventListener("change",loadModels);
 
 function depreciationRate(fuel){
 
@@ -199,31 +258,31 @@ return payment;
 
 function analyze(){
 
-let price = parseFloat(price.value);
-let deposit = parseFloat(deposit.value);
-let apr = parseFloat(apr.value);
-let months = parseInt(term.value);
-let balloon = parseFloat(balloon.value);
-let fuel = fuel.value;
-let annualMileage = parseFloat(annualMileage.value);
+let price=parseFloat(document.getElementById("price").value);
+let deposit=parseFloat(document.getElementById("deposit").value);
+let balloon=parseFloat(document.getElementById("balloon").value);
+let apr=parseFloat(document.getElementById("apr").value);
+let months=parseInt(document.getElementById("term").value);
+let fuel=document.getElementById("fuel").value;
+let annualMileage=parseFloat(document.getElementById("annualMileage").value || 0);
 
-let rate = depreciationRate(fuel);
+let rate=depreciationRate(fuel);
 
-let years = months/12;
+let years=months/12;
 
-let predicted = price * Math.pow((1-rate),years);
+let predicted=price*Math.pow((1-rate),years);
 
-let mileagePenalty = (annualMileage/10000)*0.03*years;
+let mileagePenalty=(annualMileage/10000)*0.03*years;
 
-predicted = predicted*(1-mileagePenalty);
+predicted=predicted*(1-mileagePenalty);
 
-let monthly = monthlyPayment(price,deposit,balloon,apr,months);
+let monthly=monthlyPayment(price,deposit,balloon,apr,months);
 
 let negotiation;
 
-if(balloon > predicted){
+if(balloon>predicted){
 
-negotiation =
+negotiation=
 `<span class="warning">
 Dealer balloon appears HIGH by £${(balloon-predicted).toFixed(0)}.
 Monthly payment may be artificially low.
@@ -231,20 +290,20 @@ Monthly payment may be artificially low.
 
 }else{
 
-negotiation =
+negotiation=
 `<span class="good">
 Balloon value looks fair or conservative.
 </span>`;
 
 }
 
-result.innerHTML = `
+document.getElementById("result").innerHTML=`
 
 <h2>Deal Analysis</h2>
 
-Predicted Value at End of Term: <b>£${predicted.toFixed(0)}</b><br><br>
+Predicted Value After Term: <b>£${predicted.toFixed(0)}</b><br><br>
 
-Dealer Balloon Payment: <b>£${balloon}</b><br><br>
+Dealer Balloon: <b>£${balloon}</b><br><br>
 
 Estimated Monthly Payment: <b>£${monthly.toFixed(0)}</b><br><br>
 
@@ -256,6 +315,8 @@ drawChart(price,rate,years);
 
 }
 
+let chart;
+
 function drawChart(price,rate,years){
 
 let labels=[];
@@ -264,36 +325,33 @@ let values=[];
 for(let y=0;y<=years;y++){
 
 labels.push("Year "+y);
-
 values.push(price*Math.pow((1-rate),y));
 
 }
 
-new Chart(document.getElementById("valueChart"),{
+if(chart){
+chart.destroy();
+}
+
+chart=new Chart(document.getElementById("valueChart"),{
 
 type:"line",
 
 data:{
-
 labels:labels,
-
 datasets:[{
-
-label:"Predicted Car Value",
-
+label:"Predicted Car Value (£)",
 data:values,
-
 fill:false,
-
 tension:0.1
-
 }]
-
 }
 
 });
 
 }
+
+loadMakes();
 
 </script>
 
